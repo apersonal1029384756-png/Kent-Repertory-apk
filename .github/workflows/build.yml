@@ -8,8 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -23,13 +25,19 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Regenerate Native Android Project Scaffolding
+        run: |
+          flutter create . --platforms=android
+          # Add Internet permission to the generated manifest
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
+
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build Release APK
         run: flutter build apk --release
 
-      - name: Upload Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: kent-repertory-release
