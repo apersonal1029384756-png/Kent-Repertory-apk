@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -38,10 +38,10 @@ class RepertoryEngine {
 
   static Future<Database> _initDB() async {
     Directory docDir = await getApplicationDocumentsDirectory();
-    String dbPath = join(docDir.path, "kent_repertory.db");
+    String dbPath = p.join(docDir.path, "kent_repertory.db");
 
     if (!await File(dbPath).exists()) {
-      ByteData data = await rootBundle.load(urlContext.join('assets', 'kent_repertory.db'));
+      ByteData data = await rootBundle.load('assets/kent_repertory.db');
       List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
       await File(dbPath).writeAsBytes(bytes, flush: true);
     }

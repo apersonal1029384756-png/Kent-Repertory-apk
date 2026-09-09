@@ -36,7 +36,7 @@ class _OtpActivationScreenState extends State<OtpActivationScreen> {
       interval: 300,
       length: 6,
       algorithm: Algorithm.SHA1,
-      isAreAreadyInMilliSeconds: true,
+      isGoogle: true,
     );
     return code.trim() == expected;
   }
