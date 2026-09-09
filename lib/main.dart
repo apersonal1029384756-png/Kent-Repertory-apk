@@ -29,16 +29,24 @@ class _OtpActivationScreenState extends State<OtpActivationScreen> {
   static const String _secretKey = "JBSWY3DPEHPK3PXP";
 
   bool _validateOtp(String code) {
-    int timeMs = DateTime.now().millisecondsSinceEpoch;
-    String expected = OTP.generateTOTPCodeString(
-      _secretKey,
-      timeMs,
-      interval: 300,
-      length: 6,
-      algorithm: Algorithm.SHA1,
-      isGoogle: true,
-    );
-    return code.trim() == expected;
+    String cleanCode = code.trim();
+    if (cleanCode.length != 6) return false;
+
+    int now = DateTime.now().millisecondsSinceEpoch;
+
+    // Check current, previous, and next 30-second window to tolerate slight clock drift
+    for (int offset in [-30000, 0, 30000]) {
+      String generated = OTP.generateTOTPCodeString(
+        _secretKey,
+        now + offset,
+        interval: 30,
+        length: 6,
+        algorithm: Algorithm.SHA1,
+        isGoogle: true,
+      );
+      if (cleanCode == generated) return true;
+    }
+    return false;
   }
 
   void _submit() async {
@@ -74,7 +82,7 @@ class _OtpActivationScreenState extends State<OtpActivationScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                "Enter the dynamic 6-digit installation key to activate offline repertory storage.",
+                "Enter the 6-digit dynamic code from Google Authenticator to activate offline repertory storage.",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
