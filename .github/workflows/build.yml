@@ -14,9 +14,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
+          distribution: 'zulu'
           java-version: '17'
 
       - name: Set up Flutter
@@ -25,17 +25,22 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Regenerate Native Android Project Scaffolding
+      - name: Create Clean App Structure
         run: |
-          flutter create . --platforms=android
-          # Add Internet permission to the generated manifest
+          # Create a clean flutter scaffold in a temp folder
+          flutter create --org com.kentrepertory.app --project-name kent_repertory_app temp_app
+          # Copy over the native android and project files
+          cp -r temp_app/android ./
+          rm -rf temp_app
+
+          # Inject Internet permission
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
