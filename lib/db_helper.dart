@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 class RemedyGrade {
@@ -27,8 +28,26 @@ class RubricResult {
   });
 }
 
+class RepertorizationResult {
+  final int remedyId;
+  final String abbreviation;
+  final int totalMarks;
+  final int rubricsCovered;
+  const RepertorizationResult({required this.remedyId, required this.abbreviation, required this.totalMarks, required this.rubricsCovered});
+}
+
+class RubricCoverage {
+  final int rubricId;
+  final String fullPath;
+  final int grade;
+  const RubricCoverage({required this.rubricId, required this.fullPath, required this.grade});
+}
+
 class RepertoryEngine {
   static Database? _db;
+  static const _databaseFileName = 'kent_repertory.db';
+  static const _bundledDatabaseVersion = 2;
+  static const _storedDatabaseVersionKey = 'kent_repertory_database_version';
 
   static Future<Database> get database async {
     if (_db != null) return _db!;
@@ -37,15 +56,49 @@ class RepertoryEngine {
   }
 
   static Future<Database> _initDB() async {
-    Directory docDir = await getApplicationDocumentsDirectory();
-    String dbPath = p.join(docDir.path, "kent_repertory.db");
-
+    final docDir = await getApplicationDocumentsDirectory();
+    final dbPath = p.join(docDir.path, _databaseFileName);
+    final prefs = await SharedPreferences.getInstance();
+    final installedVersion = prefs.getInt(_storedDatabaseVersionKey) ?? 0;
     if (!await File(dbPath).exists()) {
-      ByteData data = await rootBundle.load('assets/kent_repertory.db');
-      List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      await File(dbPath).writeAsBytes(bytes, flush: true);
+      await _installBundledDatabase(dbPath);
+    } else if (installedVersion < _bundledDatabaseVersion &&
+        await _shouldRefreshBundledDatabase(dbPath)) {
+      await _installBundledDatabase(dbPath);
     }
-    return await openDatabase(dbPath);
+    await prefs.setInt(_storedDatabaseVersionKey, _bundledDatabaseVersion);
+    return openDatabase(dbPath);
+  }
+
+  static Future<bool> _shouldRefreshBundledDatabase(String dbPath) async {
+    try {
+      final existing = File(dbPath);
+      final existingDb = await openDatabase(dbPath, readOnly: true);
+      final integrity = await existingDb.rawQuery('PRAGMA integrity_check');
+      await existingDb.close();
+      if (integrity.isEmpty || integrity.first.values.first != 'ok') return true;
+      final asset = await rootBundle.load('assets/kent_repertory.db');
+      return await existing.length() != asset.lengthInBytes;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<void> _installBundledDatabase(String dbPath) async {
+    final destination = File(dbPath);
+    final staged = File('$dbPath.staged');
+    if (await staged.exists()) await staged.delete();
+    final asset = await rootBundle.load('assets/kent_repertory.db');
+    await staged.writeAsBytes(asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes), flush: true);
+    final stagedDb = await openDatabase(staged.path, readOnly: true);
+    final integrity = await stagedDb.rawQuery('PRAGMA integrity_check');
+    await stagedDb.close();
+    if (integrity.isEmpty || integrity.first.values.first != 'ok') {
+      await staged.delete();
+      throw StateError('The bundled Kent repertory database failed integrity validation.');
+    }
+    if (await destination.exists()) await destination.delete();
+    await staged.rename(dbPath);
   }
 
   static final Map<String, String> _builtInSynonyms = {
@@ -143,5 +196,45 @@ class RepertoryEngine {
       }
     }
     return mappedResults.values.toList();
+  }
+
+  /// Sums only the actual Kent grades stored for the selected rubric IDs.
+  static Future<List<RepertorizationResult>> repertorize(List<int> rubricIds) async {
+    if (rubricIds.isEmpty) return [];
+    final placeholders = List.filled(rubricIds.length, '?').join(', ');
+    final rows = await (await database).rawQuery('''
+      SELECT rem.id AS remedy_id, rem.abbreviation AS abbreviation,
+             SUM(rr.grade) AS total_marks,
+             COUNT(DISTINCT rr.rubric_id) AS rubrics_covered
+      FROM rubric_remedies rr INNER JOIN remedies rem ON rem.id = rr.remedy_id
+      WHERE rr.rubric_id IN ($placeholders)
+      GROUP BY rem.id, rem.abbreviation
+      HAVING COUNT(DISTINCT rr.rubric_id) > 0
+      ORDER BY total_marks DESC, rubrics_covered DESC, rem.abbreviation ASC
+    ''', rubricIds);
+    return rows.map((row) => RepertorizationResult(
+      remedyId: row['remedy_id'] as int,
+      abbreviation: row['abbreviation'] as String,
+      totalMarks: (row['total_marks'] as num).toInt(),
+      rubricsCovered: (row['rubrics_covered'] as num).toInt(),
+    )).toList();
+  }
+
+  static Future<List<RubricCoverage>> remedyCoverage({required int remedyId, required List<int> rubricIds}) async {
+    if (rubricIds.isEmpty) return [];
+    final placeholders = List.filled(rubricIds.length, '?').join(', ');
+    final rows = await (await database).rawQuery('''
+      SELECT r.id AS rubric_id, r.full_path, rr.grade
+      FROM rubric_remedies rr INNER JOIN rubrics r ON r.id = rr.rubric_id
+      WHERE rr.remedy_id = ? AND rr.rubric_id IN ($placeholders)
+    ''', [remedyId, ...rubricIds]);
+    final byId = <int, RubricCoverage>{
+      for (final row in rows) row['rubric_id'] as int: RubricCoverage(
+        rubricId: row['rubric_id'] as int,
+        fullPath: row['full_path'] as String,
+        grade: (row['grade'] as num).toInt(),
+      ),
+    };
+    return rubricIds.where(byId.containsKey).map((id) => byId[id]!).toList();
   }
 }
