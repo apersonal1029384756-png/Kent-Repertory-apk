@@ -158,7 +158,8 @@ class RepertoryEngine {
     List<String> whereClauses = [];
     List<String> whereArgs = [];
     for (String token in keywords) {
-      whereClauses.add("r.full_path LIKE ?");
+      whereClauses.add("(r.full_path LIKE ? OR c.name LIKE ?)");
+      whereArgs.add("%$token%");
       whereArgs.add("%$token%");
     }
 
