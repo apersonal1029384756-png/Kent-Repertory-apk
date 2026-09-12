@@ -234,26 +234,89 @@ class RepertoryEngine {
   }
 
   /// Sums only the actual Kent grades stored for the selected rubric IDs.
-  static Future<List<RepertorizationResult>> repertorize(List<int> rubricIds) async {
-    if (rubricIds.isEmpty) return [];
-    final placeholders = List.filled(rubricIds.length, '?').join(', ');
-    final rows = await (await database).rawQuery('''
-      SELECT rem.id AS remedy_id, rem.abbreviation AS abbreviation,
-             SUM(rr.grade) AS total_marks,
-             COUNT(DISTINCT rr.rubric_id) AS rubrics_covered
-      FROM rubric_remedies rr INNER JOIN remedies rem ON rem.id = rr.remedy_id
-      WHERE rr.rubric_id IN ($placeholders)
-      GROUP BY rem.id, rem.abbreviation
-      HAVING COUNT(DISTINCT rr.rubric_id) > 0
-      ORDER BY total_marks DESC, rubrics_covered DESC, rem.abbreviation ASC
-    ''', rubricIds);
-    return rows.map((row) => RepertorizationResult(
-      remedyId: row['remedy_id'] as int,
-      abbreviation: row['abbreviation'] as String,
-      totalMarks: (row['total_marks'] as num).toInt(),
-      rubricsCovered: (row['rubrics_covered'] as num).toInt(),
-    )).toList();
-  }
+    static Future<List<RepertorizationResult>> repertorize(List<int> rubricIds) async {
+      if (rubricIds.isEmpty) return [];
+
+      final placeholders = List.filled(rubricIds.length, '?').join(', ');
+      final rows = await (await database).rawQuery('''
+        SELECT
+          rem.id AS remedy_id,
+          rem.abbreviation AS abbreviation,
+          rr.rubric_id,
+          rr.grade
+        FROM rubric_remedies rr
+        INNER JOIN remedies rem ON rem.id = rr.remedy_id
+        WHERE rr.rubric_id IN ($placeholders)
+      ''', rubricIds);
+
+      final grouped = <String, _RemedyAggregate>{};
+
+      for (final row in rows) {
+        final abbreviation = row['abbreviation'] as String? ?? '';
+        final normalized = _normalizeRemedy(abbreviation);
+
+        if (normalized.isEmpty) continue;
+
+        final remedyId = row['remedy_id'] as int;
+        final rubricId = row['rubric_id'] as int;
+        final grade = (row['grade'] as num?)?.toInt() ?? 1;
+
+        final aggregate = grouped.putIfAbsent(
+          normalized,
+          () => _RemedyAggregate(
+            abbreviation: _displayRemedy(abbreviation),
+            remedyIds: [],
+            gradesByRubric: {},
+          ),
+        );
+
+        if (!aggregate.remedyIds.contains(remedyId)) {
+          aggregate.remedyIds.add(remedyId);
+        }
+
+        final existingGrade = aggregate.gradesByRubric[rubricId];
+        if (existingGrade == null || grade > existingGrade) {
+          aggregate.gradesByRubric[rubricId] = grade;
+        }
+
+        final candidateDisplay = _displayRemedy(abbreviation);
+        if (candidateDisplay[0].toUpperCase() == candidateDisplay[0] &&
+            candidateDisplay[0].toLowerCase() != candidateDisplay[0]) {
+         if (aggregate.abbreviation[0].toUpperCase() !=
+              aggregate.abbreviation[0]) {
+            aggregate.abbreviation = candidateDisplay;
+          }
+        }
+      }
+
+      final results = grouped.values.map((item) {
+        final totalMarks = item.gradesByRubric.values.fold<int>(
+          0,
+          (sum, grade) => sum + grade,
+        );
+
+        return RepertorizationResult(
+          remedyIds: List.unmodifiable(item.remedyIds),
+          abbreviation: item.abbreviation,
+          totalMarks: totalMarks,
+          rubricsCovered: item.gradesByRubric.length,
+        );
+      }).toList();
+
+      results.sort((a, b) {
+        final marksCompare = b.totalMarks.compareTo(a.totalMarks);
+        if (marksCompare != 0) return marksCompare;
+
+        final coverageCompare = b.rubricsCovered.compareTo(a.rubricsCovered);
+        if (coverageCompare != 0) return coverageCompare;
+
+        return a.abbreviation.toLowerCase().compareTo(
+          b.abbreviation.toLowerCase(),
+        );
+      });
+
+      return results;
+   }
 
   static Future<List<RubricCoverage>> remedyCoverage({required int remedyId, required List<int> rubricIds}) async {
     if (rubricIds.isEmpty) return [];
