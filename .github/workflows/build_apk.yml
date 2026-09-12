@@ -29,7 +29,7 @@ jobs:
       # 2. Set the App Display Name (under the icon)
       - name: Rename App Label
         run: |
-          sed -i 's/android:label=".*"/android:label="Kent Repertory"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label=".*"/android:label="KENT REPERTORY FOR STUDENTS"/' android/app/src/main/AndroidManifest.xml
 
       - name: Get Dependencies
         run: flutter pub get
@@ -41,10 +41,10 @@ jobs:
       - name: Rename APK Output
         run: |
           mkdir -p final_apk
-          cp build/app/outputs/flutter-apk/app-release.apk final_apk/Kent_Repertory.apk
+          cp build/app/outputs/flutter-apk/app-release.apk "final_apk/KENT REPERTORY FOR STUDENTS.apk"
 
       - name: Upload Finished APK
         uses: actions/upload-artifact@v4
         with:
           name: Kent-Repertory-APK
-          path: final_apk/Kent_Repertory.apk
+          path: "final_apk/KENT REPERTORY FOR STUDENTS.apk"

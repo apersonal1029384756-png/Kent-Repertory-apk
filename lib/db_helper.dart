@@ -16,12 +16,14 @@ class RemedyGrade {
 
 class RubricResult {
   final int id;
+  final String chapter;
   final String fullPath;
   final int pageNumber;
   final List<RemedyGrade> remedies;
 
   RubricResult({
     required this.id,
+    required this.chapter,
     required this.fullPath,
     required this.pageNumber,
     required this.remedies,
@@ -163,11 +165,13 @@ class RepertoryEngine {
     String sql = '''
       SELECT 
         r.id as rubric_id, 
+        c.name AS chapter,
         r.full_path, 
         r.page_number,
         rem.abbreviation,
         rr.grade
       FROM rubrics r
+      INNER JOIN chapters c ON c.id = r.chapter_id
       LEFT JOIN rubric_remedies rr ON r.id = rr.rubric_id
       LEFT JOIN remedies rem ON rr.remedy_id = rem.id
       WHERE ${whereClauses.join(" AND ")}
@@ -183,6 +187,7 @@ class RepertoryEngine {
       if (!mappedResults.containsKey(id)) {
         mappedResults[id] = RubricResult(
           id: id,
+          chapter: row['chapter'] as String? ?? '',
           fullPath: row['full_path'] ?? '',
           pageNumber: row['page_number'] ?? 0,
           remedies: [],

@@ -1,20 +1,56 @@
 import 'package:flutter/material.dart';
-import 'package:otp/otp.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'db_helper.dart';
 
 final currentTotality = TotalityController();
 
-void main() async {
+enum AppThemePreference { system, light, dark }
+
+enum AppFontSize {
+  small('Small', .85), standard('Default', 1), large('Large', 1.15), extraLarge('Extra Large', 1.3);
+  const AppFontSize(this.label, this.scale);
+  final String label;
+  final double scale;
+}
+
+class AppSettings extends ChangeNotifier {
+  AppSettings(this._prefs);
+  final SharedPreferences _prefs;
+  AppThemePreference _theme = AppThemePreference.system;
+  AppFontSize _fontSize = AppFontSize.standard;
+  AppThemePreference get theme => _theme;
+  AppFontSize get fontSize => _fontSize;
+  void load() {
+    _theme = AppThemePreference.values.byName(_prefs.getString('theme_preference') ?? 'system');
+    _fontSize = AppFontSize.values.byName(_prefs.getString('font_size_preference') ?? 'standard');
+  }
+  Future<void> setTheme(AppThemePreference value) async { _theme = value; notifyListeners(); await _prefs.setString('theme_preference', value.name); }
+  Future<void> setFontSize(AppFontSize value) async { _fontSize = value; notifyListeners(); await _prefs.setString('font_size_preference', value.name); }
+}
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
-  final isActivated = prefs.getBool('is_activated') ?? false;
-  runApp(MaterialApp(
-    title: 'Kent Repertory for Students',
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(primarySwatch: Colors.teal, useMaterial3: true),
-    home: isActivated ? const RepertorySearchScreen() : const OtpActivationScreen(),
+  final settings = AppSettings(await SharedPreferences.getInstance())..load();
+  runApp(KentRepertoryApp(settings: settings));
+}
+
+class KentRepertoryApp extends StatelessWidget {
+  const KentRepertoryApp({super.key, required this.settings});
+  final AppSettings settings;
+  ThemeData _theme(Brightness brightness) {
+    final colors = ColorScheme.fromSeed(seedColor: Colors.teal, brightness: brightness);
+    return ThemeData(useMaterial3: true, colorScheme: colors,
+      appBarTheme: AppBarTheme(backgroundColor: colors.surface, foregroundColor: colors.onSurface),
+      cardTheme: CardThemeData(color: colors.surfaceContainerLow),
+      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: colors.surfaceContainerHighest, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))));
+  }
+  @override Widget build(BuildContext context) => AnimatedBuilder(animation: settings, builder: (context, _) => MaterialApp(
+    title: 'KENT REPERTORY FOR STUDENTS', debugShowCheckedModeBanner: false,
+    theme: _theme(Brightness.light), darkTheme: _theme(Brightness.dark),
+    themeMode: switch (settings.theme) { AppThemePreference.system => ThemeMode.system, AppThemePreference.light => ThemeMode.light, AppThemePreference.dark => ThemeMode.dark },
+    builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(settings.fontSize.scale)), child: child ?? const SizedBox.shrink()),
+    home: RepertorySearchScreen(settings: settings),
   ));
 }
 
@@ -41,52 +77,9 @@ class TotalityController extends ChangeNotifier {
   }
 }
 
-class OtpActivationScreen extends StatefulWidget {
-  const OtpActivationScreen({super.key});
-  @override
-  State<OtpActivationScreen> createState() => _OtpActivationScreenState();
-}
-
-class _OtpActivationScreenState extends State<OtpActivationScreen> {
-  final _otpInput = TextEditingController();
-  String _errorText = '';
-  static const _secretKey = 'JBSWY3DPEHPK3PXP';
-
-  bool _validateOtp(String code) {
-    if (code.trim().length != 6) return false;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return [-30000, 0, 30000].any((offset) =>
-        code.trim() == OTP.generateTOTPCodeString(_secretKey, now + offset, interval: 30, length: 6, algorithm: Algorithm.SHA1, isGoogle: true));
-  }
-
-  Future<void> _submit() async {
-    if (!_validateOtp(_otpInput.text)) {
-      setState(() => _errorText = 'Invalid or expired key. Please check current OTP.');
-      return;
-    }
-    await (await SharedPreferences.getInstance()).setBool('is_activated', true);
-    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const RepertorySearchScreen()));
-  }
-
-  @override
-  void dispose() { _otpInput.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('First-Time Setup')),
-    body: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      const Icon(Icons.vpn_key_rounded, size: 70, color: Colors.teal),
-      const SizedBox(height: 16), const Text('App Activation Required', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 8), const Text('Enter the 6-digit dynamic code from Google Authenticator to activate offline repertory storage.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-      const SizedBox(height: 24), TextField(controller: _otpInput, keyboardType: TextInputType.number, maxLength: 6, textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, letterSpacing: 6, fontWeight: FontWeight.bold), decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '000000', counterText: '')),
-      if (_errorText.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_errorText, style: const TextStyle(color: Colors.red))),
-      const SizedBox(height: 20), SizedBox(width: double.infinity, height: 48, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), onPressed: _submit, child: const Text('Activate Once', style: TextStyle(color: Colors.white, fontSize: 16))))
-    ]))),
-  );
-}
-
 class RepertorySearchScreen extends StatefulWidget {
-  const RepertorySearchScreen({super.key});
+  const RepertorySearchScreen({super.key, required this.settings});
+  final AppSettings settings;
   @override
   State<RepertorySearchScreen> createState() => _RepertorySearchScreenState();
 }
@@ -119,27 +112,38 @@ class _RepertorySearchScreenState extends State<RepertorySearchScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Kent Repertory for Students'), elevation: 1, actions: [
-      AnimatedBuilder(animation: currentTotality, builder: (_, __) => TextButton.icon(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TotalityScreen())),
-        icon: Badge(label: Text('${currentTotality.rubrics.length}'), child: const Icon(Icons.format_list_bulleted, color: Colors.white)),
-        label: const Text('Totality', style: TextStyle(color: Colors.white)),
-      ))
+    appBar: AppBar(title: const Text('KENT REPERTORY FOR STUDENTS'), elevation: 1, actions: [IconButton(tooltip: 'Settings', icon: const Icon(Icons.settings_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen(settings: widget.settings)))),
+      AnimatedBuilder(animation: currentTotality, builder: (_, __) => IconButton(tooltip: 'Repertorial totality (${currentTotality.rubrics.length})', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TotalityScreen())), icon: Badge(label: Text('${currentTotality.rubrics.length}'), child: const Icon(Icons.format_list_bulleted))))
     ]),
     body: Column(children: [
       Padding(padding: const EdgeInsets.all(12), child: TextField(controller: _queryController, onChanged: _onSearch, decoration: InputDecoration(hintText: "Enter symptom (e.g. 'Burning pain in head morning')...", prefixIcon: const Icon(Icons.search), suffixIcon: _queryController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _queryController.clear(); _onSearch(''); }) : null, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))))),
-      Expanded(child: _searching ? const Center(child: CircularProgressIndicator()) : _rubricResults.isEmpty ? Center(child: Text(_queryController.text.isEmpty ? 'Type a clinical symptom to search the Kent hierarchy.' : 'No matching rubrics found.', style: TextStyle(color: Colors.grey.shade600))) : ListView.builder(itemCount: _rubricResults.length, itemBuilder: (_, index) => _rubricCard(_rubricResults[index])))
+      Expanded(child: _searching ? const Center(child: CircularProgressIndicator()) : _rubricResults.isEmpty ? Center(child: Text(_queryController.text.isEmpty ? 'Type a clinical symptom to search the Kent hierarchy.' : 'No matching rubrics found.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))) : ListView.builder(itemCount: _rubricResults.length, itemBuilder: (_, index) => _rubricCard(_rubricResults[index])))
     ]),
   );
 
   Widget _rubricCard(RubricResult item) => Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    RichText(text: TextSpan(style: const TextStyle(fontSize: 16, color: Colors.black87), children: [TextSpan(text: item.fullPath, style: const TextStyle(fontWeight: FontWeight.w600)), TextSpan(text: ' = ${item.pageNumber}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade800, fontSize: 17))])),
+    Text('Chapter: ${item.chapter}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 4), Text(item.fullPath, style: const TextStyle(fontWeight: FontWeight.w600)),
+    Text('Page: ${item.pageNumber}', style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold)),
     const SizedBox(height: 8), const Divider(height: 1), const SizedBox(height: 8),
     RichText(text: TextSpan(children: item.remedies.map((remedy) => TextSpan(text: '${remedy.abbrev}  ', style: _gradeStyle(remedy.grade))).toList())),
     const SizedBox(height: 8), Align(alignment: Alignment.centerRight, child: AnimatedBuilder(animation: currentTotality, builder: (_, __) => OutlinedButton.icon(onPressed: currentTotality.contains(item.id) ? null : () => _addRubric(item), icon: Icon(currentTotality.contains(item.id) ? Icons.check : Icons.add), label: Text(currentTotality.contains(item.id) ? 'Added' : 'Add to totality'))))
   ])));
 
-  TextStyle _gradeStyle(int grade) => grade == 3 ? const TextStyle(fontWeight: FontWeight.w900, color: Colors.redAccent, fontSize: 14) : grade == 2 ? const TextStyle(fontStyle: FontStyle.italic, fontWeight: FontWeight.bold, color: Colors.blueAccent, fontSize: 14) : const TextStyle(color: Colors.black87, fontSize: 13);
+  TextStyle _gradeStyle(int grade) => grade == 3 ? TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.error) : grade == 2 ? TextStyle(fontStyle: FontStyle.italic, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary) : TextStyle(color: Theme.of(context).colorScheme.onSurface);
+}
+
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key, required this.settings});
+  final AppSettings settings;
+  @override Widget build(BuildContext context) => AnimatedBuilder(animation: settings, builder: (_, __) => Scaffold(appBar: AppBar(title: const Text('Settings')), body: ListView(children: [
+    const Padding(padding: EdgeInsets.fromLTRB(16, 20, 16, 4), child: Text('Theme', style: TextStyle(fontWeight: FontWeight.bold))),
+    ...AppThemePreference.values.map((v) => RadioListTile<AppThemePreference>(value: v, groupValue: settings.theme, onChanged: (x) { if (x != null) settings.setTheme(x); }, title: Text(switch(v) { AppThemePreference.system => 'System default', AppThemePreference.light => 'Light', AppThemePreference.dark => 'Dark' }))),
+    const Divider(), const Padding(padding: EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text('Font size', style: TextStyle(fontWeight: FontWeight.bold))),
+    ...AppFontSize.values.map((v) => RadioListTile<AppFontSize>(value: v, groupValue: settings.fontSize, onChanged: (x) { if (x != null) settings.setFontSize(x); }, title: Text(v.label))),
+    const Divider(), const ListTile(title: Text('KENT REPERTORY FOR STUDENTS', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('CREATED BY : CALM HOMOEOPATH')),
+  ])));
 }
 
 class TotalityScreen extends StatelessWidget {
@@ -153,7 +157,7 @@ class TotalityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(animation: currentTotality, builder: (_, __) {
     final rubrics = currentTotality.rubrics;
-    return Scaffold(appBar: AppBar(title: const Text('Repertorial Totality'), actions: [if (rubrics.isNotEmpty) IconButton(icon: const Icon(Icons.delete_sweep_outlined), tooltip: 'Clear totality', onPressed: () => _clear(context))]), body: rubrics.isEmpty ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.playlist_add, size: 56, color: Colors.teal), const SizedBox(height: 12), const Text('No rubrics selected', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 8), const Text('Search for a rubric and add it to build the current case.', textAlign: TextAlign.center), const SizedBox(height: 16), FilledButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.search), label: const Text('Add Symptom / Rubric'))]))) : Column(children: [Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('${rubrics.length} selected rubric${rubrics.length == 1 ? '' : 's'} — grades will be summed from Kent’s database.', style: const TextStyle(fontWeight: FontWeight.w600))), Expanded(child: ListView.builder(itemCount: rubrics.length, itemBuilder: (_, index) { final rubric = rubrics[index]; return ListTile(leading: CircleAvatar(child: Text('${index + 1}')), title: Text(rubric.fullPath), subtitle: Text('Page ${rubric.pageNumber}'), trailing: IconButton(icon: const Icon(Icons.remove_circle_outline), tooltip: 'Remove rubric', onPressed: () => currentTotality.remove(rubric.id))); })), Padding(padding: const EdgeInsets.all(16), child: Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.add), label: const Text('Add Rubric'))), const SizedBox(width: 12), Expanded(child: FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RepertorizationResultsScreen(rubrics: rubrics))), icon: const Icon(Icons.calculate), label: const Text('Repertorize')))]))]));
+    return Scaffold(appBar: AppBar(title: const Text('Repertorial Totality'), actions: [if (rubrics.isNotEmpty) IconButton(icon: const Icon(Icons.delete_sweep_outlined), tooltip: 'Clear totality', onPressed: () => _clear(context))]), body: rubrics.isEmpty ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.playlist_add, size: 56, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 12), const Text('No rubrics selected', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 8), const Text('Search for a rubric and add it to build the current case.', textAlign: TextAlign.center), const SizedBox(height: 16), FilledButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.search), label: const Text('Add Symptom / Rubric'))]))) : Column(children: [Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('${rubrics.length} selected rubric${rubrics.length == 1 ? '' : 's'} — grades will be summed from Kent’s database.', style: const TextStyle(fontWeight: FontWeight.w600))), Expanded(child: ListView.builder(itemCount: rubrics.length, itemBuilder: (_, index) { final rubric = rubrics[index]; return ListTile(leading: CircleAvatar(child: Text('${index + 1}')), title: Text(rubric.fullPath), subtitle: Text('Page ${rubric.pageNumber}'), trailing: IconButton(icon: const Icon(Icons.remove_circle_outline), tooltip: 'Remove rubric', onPressed: () => currentTotality.remove(rubric.id)); })), Padding(padding: const EdgeInsets.all(16), child: Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.add), label: const Text('Add Rubric'))), const SizedBox(width: 12), Expanded(child: FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RepertorizationResultsScreen(rubrics: rubrics))), icon: const Icon(Icons.calculate), label: const Text('Repertorize')))]))]));
   });
 }
 
