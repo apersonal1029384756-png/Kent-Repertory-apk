@@ -336,3 +336,14 @@ class RepertoryEngine {
     return rubricIds.where(byId.containsKey).map((id) => byId[id]!).toList();
   }
 }
+class _RemedyAggregate {
+  String abbreviation;
+  final List<int> remedyIds;
+  final Map<int, int> gradesByRubric;
+
+  _RemedyAggregate({
+    required this.abbreviation,
+    required this.remedyIds,
+    required this.gradesByRubric,
+  });
+}
