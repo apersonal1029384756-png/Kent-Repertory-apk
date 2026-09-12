@@ -202,7 +202,7 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
   void initState() {
     super.initState();
     _coverage = RepertoryEngine.remedyCoverage(
-      remedyId: widget.result.remedyId,
+      remedyIds: widget.result.remedyIds,
       rubricIds: widget.rubrics.map((rubric) => rubric.id).toList(),
     );
   }
