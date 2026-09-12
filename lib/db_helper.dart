@@ -318,24 +318,45 @@ class RepertoryEngine {
       return results;
    }
 
-  static Future<List<RubricCoverage>> remedyCoverage({required int remedyId, required List<int> rubricIds}) async {
-    if (rubricIds.isEmpty) return [];
-    final placeholders = List.filled(rubricIds.length, '?').join(', ');
-    final rows = await (await database).rawQuery('''
-      SELECT r.id AS rubric_id, r.full_path, rr.grade
-      FROM rubric_remedies rr INNER JOIN rubrics r ON r.id = rr.rubric_id
-      WHERE rr.remedy_id = ? AND rr.rubric_id IN ($placeholders)
-    ''', [remedyId, ...rubricIds]);
-    final byId = <int, RubricCoverage>{
-      for (final row in rows) row['rubric_id'] as int: RubricCoverage(
-        rubricId: row['rubric_id'] as int,
+  static Future<List<RubricCoverage>> remedyCoverage({
+  required List<int> remedyIds,
+  required List<int> rubricIds,
+}) async {
+  if (remedyIds.isEmpty || rubricIds.isEmpty) return [];
+
+  final remedyPlaceholders = List.filled(remedyIds.length, '?').join(', ');
+  final rubricPlaceholders = List.filled(rubricIds.length, '?').join(', ');
+
+  final rows = await (await database).rawQuery('''
+    SELECT r.id AS rubric_id, r.full_path, rr.grade
+    FROM rubric_remedies rr
+    INNER JOIN rubrics r ON r.id = rr.rubric_id
+    WHERE rr.remedy_id IN ($remedyPlaceholders)
+      AND rr.rubric_id IN ($rubricPlaceholders)
+  ''', [...remedyIds, ...rubricIds]);
+
+  final byId = <int, RubricCoverage>{};
+
+  for (final row in rows) {
+    final rubricId = row['rubric_id'] as int;
+    final grade = (row['grade'] as num).toInt();
+
+    final existing = byId[rubricId];
+
+    if (existing == null || grade > existing.grade) {
+      byId[rubricId] = RubricCoverage(
+        rubricId: rubricId,
         fullPath: row['full_path'] as String,
-        grade: (row['grade'] as num).toInt(),
-      ),
-    };
-    return rubricIds.where(byId.containsKey).map((id) => byId[id]!).toList();
+        grade: grade,
+      );
+    }
   }
-}
+
+  return rubricIds
+      .where(byId.containsKey)
+      .map((id) => byId[id]!)
+      .toList();
+  }
 class _RemedyAggregate {
   String abbreviation;
   final List<int> remedyIds;
