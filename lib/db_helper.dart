@@ -31,11 +31,19 @@ class RubricResult {
 }
 
 class RepertorizationResult {
-  final int remedyId;
+  final List<int> remedyIds;
   final String abbreviation;
   final int totalMarks;
   final int rubricsCovered;
-  const RepertorizationResult({required this.remedyId, required this.abbreviation, required this.totalMarks, required this.rubricsCovered});
+
+  const RepertorizationResult({
+    required this.remedyIds,
+    required this.abbreviation,
+    required this.totalMarks,
+    required this.rubricsCovered,
+  });
+
+  int get remedyId => remedyIds.first;
 }
 
 class RubricCoverage {
