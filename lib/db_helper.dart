@@ -157,7 +157,24 @@ class RepertoryEngine {
     }
     return resolvedKeywords.toSet().toList();
   }
+  static String _normalizeRemedy(String abbreviation) {
+    return abbreviation
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[.\s]+$'), '');
+  }
 
+  static String _displayRemedy(String abbreviation) {
+    final trimmed = abbreviation.trim();
+    if (trimmed.isEmpty) return trimmed;
+
+    final first = trimmed.substring(0, 1);
+    if (first == first.toUpperCase() && first != first.toLowerCase()) {
+      return trimmed;
+    }
+
+    return first.toUpperCase() + trimmed.substring(1);
+  }
   static Future<List<RubricResult>> searchSymptom(String rawQuery) async {
     final db = await database;
     List<String> keywords = await tokenizeKeywords(rawQuery);
