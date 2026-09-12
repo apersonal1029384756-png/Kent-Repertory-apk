@@ -166,13 +166,17 @@ class RepertoryEngine {
     String sql = '''
       SELECT 
         r.id as rubric_id, 
-        c.name AS chapter,
+        CASE
+          WHEN pc.name IS NOT NULL THEN pc.name || ' → ' || c.name
+          ELSE c.name
+        END AS chapter,
         r.full_path, 
         r.page_number,
         rem.abbreviation,
         rr.grade
       FROM rubrics r
       INNER JOIN chapters c ON c.id = r.chapter_id
+      LEFT JOIN chapters pc ON pc.id = c.parent_chapter_id
       LEFT JOIN rubric_remedies rr ON r.id = rr.rubric_id
       LEFT JOIN remedies rem ON rr.remedy_id = rem.id
       WHERE ${whereClauses.join(" AND ")}
