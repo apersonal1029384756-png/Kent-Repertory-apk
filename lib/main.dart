@@ -238,10 +238,6 @@ class KentRepertoryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (showActivation) {
-      return OtpActivationScreen(settings: settings);
-    }
-
     return AnimatedBuilder(
         animation: settings,
         builder: (context, _) => MaterialApp(
@@ -260,7 +256,9 @@ class KentRepertoryApp extends StatelessWidget {
             ),
             child: child ?? const SizedBox.shrink(),
           ),
-          home: RepertorySearchScreen(settings: settings),
+          home: showActivation
+              ? OtpActivationScreen(settings: settings)
+              : RepertorySearchScreen(settings: settings),
         ),
       );
 }
