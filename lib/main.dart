@@ -265,6 +265,7 @@ class KentRepertoryApp extends StatelessWidget {
       );
 }
 
+}
 class TotalityController extends ChangeNotifier {
   final List<RubricResult> _rubrics = [];
   List<RubricResult> get rubrics => List.unmodifiable(_rubrics);
