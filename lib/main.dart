@@ -500,18 +500,31 @@ class _RepertorySearchScreenState extends State<RepertorySearchScreen> {
         ),
       );
 
-  TextStyle _gradeStyle(int grade) => grade == 3
-      ? TextStyle(
-          fontWeight: FontWeight.w900,
-          color: Theme.of(context).colorScheme.error,
-        )
-      : grade == 2
-          ? TextStyle(
-              fontStyle: FontStyle.italic,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            )
-          : TextStyle(color: Theme.of(context).colorScheme.onSurface);
+  TextStyle _gradeStyle(int grade) {
+    final color = Theme.of(context).colorScheme.onSurface;
+
+    switch (grade) {
+      case 3:
+        return TextStyle(
+          fontWeight: FontWeight.bold,
+          fontStyle: FontStyle.normal,
+          color: color,
+        );
+      case 2:
+        return TextStyle(
+          fontWeight: FontWeight.normal,
+          fontStyle: FontStyle.italic,
+          color: color,
+        );
+      case 1:
+      default:
+        return TextStyle(
+          fontWeight: FontWeight.normal,
+          fontStyle: FontStyle.normal,
+          color: color,
+        );
+    }
+  }
 }
 
 class SettingsScreen extends StatelessWidget {
